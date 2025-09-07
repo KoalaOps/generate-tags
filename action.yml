@@ -1,0 +1,103 @@
+name: 'Generate Service Tags'
+description: 'Generate tags for services based on services.json or single service'
+
+inputs:
+  services_config_path:
+    description: 'Path to services.json file'
+    required: false
+    default: 'services.json'
+  service_name:
+    description: 'Single service name (when not using services.json)'
+    required: false
+  tag_format:
+    description: 'Tag format: branch-date, branch-date-counter, semver, custom'
+    required: false
+    default: 'branch-date-counter'
+  branch:
+    description: 'Branch name for tag generation'
+    required: false
+    default: ${{ github.ref_name }}
+  custom_base_tag:
+    description: 'Custom base tag (used when tag_format is custom)'
+    required: false
+
+outputs:
+  tags:
+    description: 'JSON object mapping service names to tags'
+    value: ${{ steps.generate.outputs.tags }}
+  base_tag:
+    description: 'Base tag used for all services'
+    value: ${{ steps.generate.outputs.base_tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Generate tags
+      id: generate
+      shell: bash
+      run: |
+        # Generate base tag based on format
+        case "${{ inputs.tag_format }}" in
+          "branch-date")
+            BASE_TAG="${{ inputs.branch }}-$(date +%Y%m%d-%H%M%S)"
+            ;;
+          "branch-date-counter")
+            BASE_TAG="${{ inputs.branch }}-$(date +%Y%m%d-%H%M%S)"
+            ;;
+          "semver")
+            # Would integrate with git tags for proper semver
+            BASE_TAG="v$(date +%Y.%m.%d)"
+            ;;
+          "custom")
+            BASE_TAG="${{ inputs.custom_base_tag }}"
+            ;;
+          *)
+            BASE_TAG="$(date +%Y%m%d-%H%M%S)"
+            ;;
+        esac
+        
+        # Clean branch name for use in tags
+        BASE_TAG=$(echo "$BASE_TAG" | sed 's/refs\/heads\///g' | sed 's/\//-/g')
+        
+        echo "base_tag=$BASE_TAG" >> $GITHUB_OUTPUT
+        
+        # Check if services.json exists
+        if [ -f "${{ inputs.services_config_path }}" ]; then
+          echo "Found services.json, generating tags for multiple services"
+          
+          SERVICES_JSON=$(cat "${{ inputs.services_config_path }}")
+          TAGS_JSON="{}"
+          COUNTER=0
+          
+          for service in $(echo "$SERVICES_JSON" | jq -c '.services[]'); do
+            SERVICE_NAME=$(echo "$service" | jq -r '.name')
+            
+            # Add counter for multi-service repos if using counter format
+            if [ "${{ inputs.tag_format }}" == "branch-date-counter" ]; then
+              SERVICE_TAG="${BASE_TAG}-${COUNTER}"
+            else
+              SERVICE_TAG="${BASE_TAG}"
+            fi
+            
+            TAGS_JSON=$(echo "$TAGS_JSON" | jq --arg name "$SERVICE_NAME" --arg tag "$SERVICE_TAG" '.[$name] = $tag')
+            COUNTER=$((COUNTER + 1))
+          done
+          
+          echo "tags=$TAGS_JSON" >> $GITHUB_OUTPUT
+          
+        else
+          echo "No services.json found, generating single service tag"
+          
+          SERVICE_NAME="${{ inputs.service_name }}"
+          if [ -z "$SERVICE_NAME" ]; then
+            SERVICE_NAME="app"  # Default service name
+          fi
+          
+          # Single service doesn't need counter
+          TAGS_JSON=$(jq -n --arg name "$SERVICE_NAME" --arg tag "$BASE_TAG" '{($name): $tag}')
+          
+          echo "tags=$TAGS_JSON" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "Generated tags:"
+        echo "$TAGS_JSON" | jq .
