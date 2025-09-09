@@ -1,5 +1,10 @@
 name: 'Generate Service Tags'
 description: 'Generate tags for services based on services.json or single service'
+author: 'KoalaOps'
+
+branding:
+  icon: 'tag'
+  color: 'purple'
 
 inputs:
   services_config_path:
