@@ -88,7 +88,7 @@ runs:
             COUNTER=$((COUNTER + 1))
           done
           
-          echo "tags=$TAGS_JSON" >> $GITHUB_OUTPUT
+          echo "tags=$(echo $TAGS_JSON | jq -c .)" >> $GITHUB_OUTPUT
           
         else
           echo "No services.json found, generating single service tag"
@@ -101,7 +101,7 @@ runs:
           # Single service doesn't need counter
           TAGS_JSON=$(jq -n --arg name "$SERVICE_NAME" --arg tag "$BASE_TAG" '{($name): $tag}')
           
-          echo "tags=$TAGS_JSON" >> $GITHUB_OUTPUT
+          echo "tags=$(echo $TAGS_JSON | jq -c .)" >> $GITHUB_OUTPUT
         fi
         
         echo "Generated tags:"
